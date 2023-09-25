@@ -1,11 +1,19 @@
-import { Body, Controller, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common';
 import { TaskDataService } from '../services/task-data.service';
 import { CreateNewTaskDto } from '../dtos/create-new-task.dto';
 import { UpdateTaskBodyDto, UpdateTaskParamDto } from '../dtos/update-task.dto';
+import { GetPaginatedTasksQueryDto } from '../dtos/get-paginated-tasks.dto';
 
 @Controller('task')
 export class TaskController {
   constructor(private readonly taskDataService: TaskDataService) {}
+
+  @Get()
+  getPaginatedTasks(@Query() query: GetPaginatedTasksQueryDto) {
+    return this.taskDataService.getPaginatedTasks({
+      ...query,
+    });
+  }
 
   @Post()
   createNewTask(@Body() body: CreateNewTaskDto) {

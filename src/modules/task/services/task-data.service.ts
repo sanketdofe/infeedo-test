@@ -18,6 +18,10 @@ import {
   UpdateTaskRequest,
   UpdateTaskResponse,
 } from '../types/update-task.type';
+import {
+  GetPaginatedTasksRequest,
+  GetPaginatedTasksResponse,
+} from '../types/get-paginated-tasks.type';
 
 @Injectable()
 export class TaskDataService {
@@ -61,7 +65,7 @@ export class TaskDataService {
     if (task.name) {
       updateTaskQuery.push(`"name" = $${updateTaskQueryValues.length + 1}`);
       updateTaskQuery.push(
-        `"uniqueName" = $${updateTaskQueryValues.length + 1}`,
+        `"uniqueName" = $${updateTaskQueryValues.length + 2}`,
       );
       updateTaskQueryValues.push(
         task.name,
@@ -88,6 +92,7 @@ export class TaskDataService {
         UPDATE "Task" 
         SET ${updateTaskQuery.join(', ')}
         WHERE id = $${updateTaskQueryValues.length + 1}
+        RETURNING *
       `,
       [...updateTaskQueryValues, task.id],
     );
@@ -97,5 +102,54 @@ export class TaskDataService {
     }
 
     return updatedTask;
+  }
+
+  async getPaginatedTasks({
+    lastTaskDateCreated,
+    lastTaskId,
+    limit = 10,
+  }: GetPaginatedTasksRequest): Promise<GetPaginatedTasksResponse> {
+    let whereClause = '';
+    const queryValues = [];
+    if (lastTaskId && lastTaskId) {
+      whereClause = `
+        WHERE 
+          "dateCreated" < $${queryValues.length + 1} 
+          OR (
+            "dateCreated" = $${queryValues.length + 1} 
+            AND "id" < $${queryValues.length + 2}
+          )
+      `;
+      queryValues.push(new Date(lastTaskDateCreated).toISOString(), lastTaskId);
+    }
+
+    const paginatedTasks = await this.postgresService.query<
+      Omit<Task, 'uniqueName'>
+    >(
+      `
+          SELECT id, "name", "description", status, "dateCreated", "dateUpdated"
+          FROM "Task"
+          ${whereClause}
+          ORDER BY "dateCreated" DESC, "id" DESC
+          LIMIT $${queryValues.length + 1}
+        `,
+      [...queryValues, limit + 1],
+    );
+
+    let hasMore = false;
+    if (paginatedTasks.length === limit + 1) {
+      hasMore = true;
+      paginatedTasks.pop();
+    }
+    const lastTask = paginatedTasks[paginatedTasks.length - 1];
+
+    return {
+      tasks: paginatedTasks,
+      paginationParams: {
+        lastTaskId: lastTask?.id ?? null,
+        lastTaskDateCreated: lastTask?.dateCreated ?? null,
+        hasMore,
+      },
+    };
   }
 }
